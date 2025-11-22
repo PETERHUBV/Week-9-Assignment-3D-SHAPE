@@ -1,12 +1,30 @@
 using JetBrains.Annotations;
+using Unity.VisualScripting;
 using UnityEngine;
+
 
 public class LineGen : MonoBehaviour
 {
+
+    public enum ShapeType
+    {
+        Cube,
+        Pyramid,
+        Cylinder,
+        RectColumn,
+        Sphere
+    }
+
+    public ShapeType shapeToDraw; // Choose which shape to draw
     public Material material;
-    public float cubeSize;
+
+    public float cubeSize = 1f;
     public Vector2 cubePos;
-    public float zPos;
+    public Vector2 cubePos2;
+    public float zPos = 0f;
+    public float zPos2 = 0f;
+    public float shapeScale = 1f;
+    public int segments = 12; //   Cylinder, Sphere, Pyramid 
 
     private void OnPostRender()
     {
@@ -20,206 +38,174 @@ public class LineGen : MonoBehaviour
             Debug.LogError("You need to add a material");
             return;
         }
+
         GL.PushMatrix();
-        material.SetPass(0);
-        GL.Color(material.color);
         GL.Begin(GL.LINES);
-        
+        material.SetPass(0);
 
-        var frontSquare = GetCube();
-        var frontZ = PerspectiveCamera.Instance.GetPerspective(zPos + cubeSize * .5f);
-        var backSquare = GetCube();
-        var backZ = PerspectiveCamera.Instance.GetPerspective(zPos - cubeSize * .5f);
+    
+        if (shapeToDraw == ShapeType.Cube)
+        {
+            DrawCube(cubePos, cubeSize * shapeScale);
+        }
+        else if (shapeToDraw == ShapeType.Pyramid)
+        {
+            DrawPyramid(new Vector3(0, 0, 3), 1f * shapeScale, segments);
+        }
+        else if (shapeToDraw == ShapeType.Cylinder)
+        {
+            DrawCylinder(new Vector3(0, 0, 3), 1f * shapeScale, 2f * shapeScale, segments);
+        }
+        else if (shapeToDraw == ShapeType.RectColumn)
+        {
+            DrawRectColumn(new Vector3(0, 0, 3), 1f * shapeScale, 2f * shapeScale, 1f * shapeScale, segments);
+        }
+        else if (shapeToDraw == ShapeType.Sphere)
+        {
+            DrawSphere(new Vector3(0, 0, 3), 1f * shapeScale, segments);
+        }
 
-        var computedFront = RenderSquare(frontSquare, frontZ);
-        var computedBack = RenderSquare(backSquare, backZ);
+        GL.End();
+        GL.PopMatrix();
+    }
+
+    // 
+
+    void DrawCube(Vector2 pos, float size)
+    {
+        Vector2[] square = GetCube(pos);
+        float frontZ = PerspectiveCamera.Instance.GetPerspective(zPos + size * 0.5f);
+        float backZ = PerspectiveCamera.Instance.GetPerspective(zPos - size * 0.5f);
+
+        Vector2[] computedFront = RenderSquare(square, frontZ);
+        Vector2[] computedBack = RenderSquare(square, backZ);
 
         for (int i = 0; i < 4; i++)
         {
             GL.Vertex(computedFront[i]);
             GL.Vertex(computedBack[i]);
         }
-
-        // DRAW ADDITIONAL SHAPES
-
-        // Pyramid (square base)
-        DrawPyramid(new Vector3(3, 0, 0), 1f, 1.5f);
-
-        // Cylinder (more than 5 segments)
-        DrawCylinder(new Vector3(-3, 0, 0), 0.5f, 1.5f, 12);
-
-        // Rectangular Column
-        DrawRectangularColumn(new Vector3(0, 0, 3), 1f, 2f, 1f);
-
-        // Sphere (more than 5 segments)
-        DrawSphere(new Vector3(0, 0, -3), 0.75f, 12, 12);
-
-
-
-
-
-
-        GL.End();
-        GL.PopMatrix();
     }
 
-
-
-
-
-
-
-
-    public Vector2[] GetCube()
+    public Vector2[] GetCube(Vector2 pos)
     {
-        var faceArray = new Vector2[]
+        Vector2[] faceArray = new Vector2[]
         {
-            new Vector2 (1, 1f),
-            new Vector2 (-1f, 1f),
-            new Vector2 (-1f, -1f),
-            new Vector2 (1f, -1f),
+            new Vector2(1, 1),
+            new Vector2(-1, 1),
+            new Vector2(-1, -1),
+            new Vector2(1, -1)
         };
 
-        for(var i = 0; i < faceArray.Length; i++)
+        for (int i = 0; i < faceArray.Length; i++)
         {
-            faceArray[i] = new Vector2(cubePos.x + faceArray[i].x, cubePos.y + faceArray[i].y) * cubeSize;
+            faceArray[i] = (faceArray[i] + pos) * cubeSize;
         }
 
         return faceArray;
+    }
+
+    Vector2[] RenderSquare(Vector2[] square, float perspective)
+    {
+        Vector2[] computed = new Vector2[square.Length];
+        for (int i = 0; i < square.Length; i++)
+        {
+            computed[i] = square[i] * perspective;
+            GL.Vertex(square[i] * perspective);
+            GL.Vertex(square[(i + 1) % square.Length] * perspective);
+        }
+        return computed;
+    }
+
+    Vector2 Project3D(Vector3 p)
+    {
+        float perspective = PerspectiveCamera.Instance.GetPerspective(p.z);
+        return new Vector2(p.x * perspective, p.y * perspective);
+    }
+
+    public void DrawPyramid(Vector3 center, float size, int segments)
+    {
+        Vector3 top = center + new Vector3(0, size, 0);
+
         
-    }
-
-    private Vector2[] RenderSquare(Vector2[] squareElements, float perspective)
-    {
-        var computedSquare = new Vector2[squareElements.Length];
-        for(var i = 0; i < squareElements.Length; i++)
-        {
-            computedSquare[i] = squareElements[i] * perspective;
-            GL.Vertex(squareElements[i] * perspective);
-            GL.Vertex(squareElements[(i + 1) % squareElements.Length] * perspective);
-        }
-        return computedSquare;
-    }
-
-
-    // Pyramid
-   
-    private void DrawPyramid(Vector3 pos, float size, float height)
-    {
-        Vector3[] baseVerts = new Vector3[]
-        {
-            pos + new Vector3(-size, 0, -size),
-            pos + new Vector3(size, 0, -size),
-            pos + new Vector3(size, 0, size),
-            pos + new Vector3(-size, 0, size)
-        };
-        Vector3 apex = pos + new Vector3(0, height, 0);
-
-        // Base square
         for (int i = 0; i < 4; i++)
         {
-            GL.Vertex(baseVerts[i]);
-            GL.Vertex(baseVerts[(i + 1) % 4]);
-        }
+            Vector3 a = center + new Vector3(size * (i % 2 == 0 ? -1 : 1), 0, size * (i < 2 ? -1 : 1));
+            Vector3 b = center + new Vector3(size * ((i + 1) % 2 == 0 ? -1 : 1), 0, size * ((i + 1) < 2 ? -1 : 1));
 
-        // Sides
-        for (int i = 0; i < 4; i++)
-        {
-            GL.Vertex(baseVerts[i]);
-            GL.Vertex(apex);
-        }
-    }
+            GL.Vertex(Project3D(a));
+            GL.Vertex(Project3D(b));
 
-    
-    // Cylinder
-  
-    private void DrawCylinder(Vector3 pos, float radius, float height, int segments)
-    {
-        float halfHeight = height / 2f;
-        Vector3[] top = new Vector3[segments];
-        Vector3[] bottom = new Vector3[segments];
-
-        for (int i = 0; i < segments; i++)
-        {
-            float angle = (2 * Mathf.PI / segments) * i;
-            float x = Mathf.Cos(angle) * radius;
-            float z = Mathf.Sin(angle) * radius;
-
-            top[i] = pos + new Vector3(x, halfHeight, z);
-            bottom[i] = pos + new Vector3(x, -halfHeight, z);
-
-           // side lines
-            GL.Vertex(top[i]);
-            GL.Vertex(bottom[i]);
-
-            //  top circle
-            GL.Vertex(top[i]);
-            GL.Vertex(top[(i + 1) % segments]);
-
-            //  bottom circle
-            GL.Vertex(bottom[i]);
-            GL.Vertex(bottom[(i + 1) % segments]);
+            GL.Vertex(Project3D(top));
+            GL.Vertex(Project3D(a));
         }
     }
 
-    
-    // Rectangular Column
-
-    private void DrawRectangularColumn(Vector3 pos, float width, float height, float depth)
+    public void DrawRectColumn(Vector3 center, float width, float height, float depth, int segments)
     {
-        Vector3 half = new Vector3(width / 2f, height / 2f, depth / 2f);
-        Vector3[] verts = new Vector3[8];
-        verts[0] = pos + new Vector3(-half.x, -half.y, -half.z);
-        verts[1] = pos + new Vector3(half.x, -half.y, -half.z);
-        verts[2] = pos + new Vector3(half.x, -half.y, half.z);
-        verts[3] = pos + new Vector3(-half.x, -half.y, half.z);
-        verts[4] = pos + new Vector3(-half.x, half.y, -half.z);
-        verts[5] = pos + new Vector3(half.x, half.y, -half.z);
-        verts[6] = pos + new Vector3(half.x, half.y, half.z);
-        verts[7] = pos + new Vector3(-half.x, half.y, half.z);
+        Vector3[] corners = new Vector3[8];
+        float w = width * 0.5f, h = height * 0.5f, d = depth * 0.5f;
 
-        int[,] edges = new int[,]
+        int i = 0;
+        for (int x = -1; x <= 1; x += 2)
+            for (int y = -1; y <= 1; y += 2)
+                for (int z = -1; z <= 1; z += 2)
+                    corners[i++] = center + new Vector3(x * w, y * h, z * d);
+
+        int[,] edges =
         {
-            {0,1},{1,2},{2,3},{3,0},
-            {4,5},{5,6},{6,7},{7,4},
+            {0,1},{1,3},{3,2},{2,0},
+            {4,5},{5,7},{7,6},{6,4},
             {0,4},{1,5},{2,6},{3,7}
         };
 
-        for (int i = 0; i < edges.GetLength(0); i++)
+        for (i = 0; i < edges.GetLength(0); i++)
         {
-            GL.Vertex(verts[edges[i, 0]]);
-            GL.Vertex(verts[edges[i, 1]]);
+            GL.Vertex(Project3D(corners[edges[i, 0]]));
+            GL.Vertex(Project3D(corners[edges[i, 1]]));
         }
     }
 
-    
-    // Sphere
-
-    private void DrawSphere(Vector3 pos, float radius, int segments, int rings)
+    public void DrawCylinder(Vector3 center, float radius, float height, int segments)
     {
-        for (int i = 0; i <= rings; i++)
+        Vector3[] bottom = new Vector3[segments];
+        Vector3[] top = new Vector3[segments];
+
+        for (int i = 0; i < segments; i++)
         {
-            float lat0 = Mathf.PI * (-0.5f + (float)(i - 1) / rings);
-            float z0 = Mathf.Sin(lat0);
-            float zr0 = Mathf.Cos(lat0);
+            float angle = i * Mathf.PI * 2f / segments;
+            bottom[i] = center + new Vector3(Mathf.Cos(angle) * radius, 0, Mathf.Sin(angle) * radius);
+            top[i] = bottom[i] + new Vector3(0, height, 0);
+        }
 
-            float lat1 = Mathf.PI * (-0.5f + (float)i / rings);
-            float z1 = Mathf.Sin(lat1);
-            float zr1 = Mathf.Cos(lat1);
+        for (int i = 0; i < segments; i++)
+        {
+            int n = (i + 1) % segments;
+            GL.Vertex(Project3D(bottom[i])); GL.Vertex(Project3D(bottom[n]));
+            GL.Vertex(Project3D(top[i])); GL.Vertex(Project3D(top[n]));
+            GL.Vertex(Project3D(bottom[i])); GL.Vertex(Project3D(top[i]));
+        }
+    }
 
-            for (int j = 0; j <= segments; j++)
+    public void DrawSphere(Vector3 center, float radius, int segments)
+    {
+        for (int lat = 0; lat < segments; lat++)
+        {
+            float a0 = Mathf.PI * lat / segments;
+            float a1 = Mathf.PI * (lat + 1) / segments;
+
+            for (int lon = 0; lon < segments; lon++)
             {
-                float lng = 2 * Mathf.PI * (float)(j - 1) / segments;
-                float x = Mathf.Cos(lng);
-                float y = Mathf.Sin(lng);
+                float b0 = 2 * Mathf.PI * lon / segments;
+                float b1 = 2 * Mathf.PI * (lon + 1) / segments;
 
-                Vector3 v0 = pos + new Vector3(x * zr0, z0, y * zr0) * radius;
-                Vector3 v1 = pos + new Vector3(x * zr1, z1, y * zr1) * radius;
+                Vector3 p00 = center + new Vector3(radius * Mathf.Sin(a0) * Mathf.Cos(b0), radius * Mathf.Cos(a0), radius * Mathf.Sin(a0) * Mathf.Sin(b0));
+                Vector3 p01 = center + new Vector3(radius * Mathf.Sin(a0) * Mathf.Cos(b1), radius * Mathf.Cos(a0), radius * Mathf.Sin(a0) * Mathf.Sin(b1));
+                Vector3 p10 = center + new Vector3(radius * Mathf.Sin(a1) * Mathf.Cos(b0), radius * Mathf.Cos(a1), radius * Mathf.Sin(a1) * Mathf.Sin(b0));
 
-                GL.Vertex(v0);
-                GL.Vertex(v1);
+                GL.Vertex(Project3D(p00)); GL.Vertex(Project3D(p01));
+                GL.Vertex(Project3D(p00)); GL.Vertex(Project3D(p10));
             }
         }
     }
 }
-
